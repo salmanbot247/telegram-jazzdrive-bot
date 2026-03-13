@@ -5,22 +5,66 @@ const fs = require('fs');
 const DOWNLOAD_DIR = './downloads';
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
+// yt-dlp dhundo ya install karo
 function getYtDlpCmd() {
-  const paths = ['yt-dlp', '/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp', '/root/.local/bin/yt-dlp'];
+  const paths = [
+    '/root/.local/bin/yt-dlp',
+    '/usr/local/bin/yt-dlp',
+    '/usr/bin/yt-dlp',
+    '/app/.local/bin/yt-dlp',
+    path.join(process.env.HOME || '/root', '.local/bin/yt-dlp')
+  ];
   for (const p of paths) {
-    try { execSync(`${p} --version`, { stdio: 'pipe' }); return p; } catch {}
+    try { 
+      execSync(`${p} --version`, { stdio: 'pipe' }); 
+      return p; 
+    } catch {}
   }
-  return 'yt-dlp'; // fallback - crash nahi karega startup pe
+  try {
+    execSync('yt-dlp --version', { stdio: 'pipe' });
+    return 'yt-dlp';
+  } catch {}
+  return null;
 }
 
-// Sirf log karo - koi install nahi, koi crash nahi
 function ensureYtDlp() {
-  const cmd = getYtDlpCmd();
-  console.log(`✅ yt-dlp path: ${cmd}`);
+  if (getYtDlpCmd()) {
+    console.log('✅ yt-dlp found: ' + getYtDlpCmd());
+    return;
+  }
+  
+  console.log('📦 yt-dlp nahi mila, install kar raha hun...');
+  
+  // Method 1: pip3
+  try {
+    execSync('pip3 install yt-dlp --break-system-packages', { stdio: 'inherit' });
+    console.log('✅ yt-dlp installed via pip3');
+    return;
+  } catch {}
+  
+  // Method 2: pip
+  try {
+    execSync('pip install yt-dlp --break-system-packages', { stdio: 'inherit' });
+    console.log('✅ yt-dlp installed via pip');
+    return;
+  } catch {}
+
+  // Method 3: curl se binary download
+  try {
+    execSync(
+      'curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp',
+      { stdio: 'inherit' }
+    );
+    console.log('✅ yt-dlp installed via curl');
+    return;
+  } catch {}
+
+  console.error('❌ yt-dlp install nahi ho saka!');
 }
 
 async function getVideoInfo(url) {
-  const cmd = getYtDlpCmd();
+  ensureYtDlp();
+  const cmd = getYtDlpCmd() || 'yt-dlp';
   return new Promise((resolve, reject) => {
     exec(`${cmd} --dump-json --no-playlist "${url}"`, { timeout: 30000 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(stderr || err.message));
@@ -33,7 +77,8 @@ async function getVideoInfo(url) {
 }
 
 async function downloadMedia(url, quality) {
-  const cmd = getYtDlpCmd();
+  ensureYtDlp();
+  const cmd = getYtDlpCmd() || 'yt-dlp';
   return new Promise((resolve, reject) => {
     let args = '';
     switch (quality) {
