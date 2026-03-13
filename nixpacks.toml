@@ -1,6 +1,5 @@
+
+
 [phases.setup]
-nixPkgs = ["ffmpeg"]
-
-[start]
-cmd = "node index.js"
-
+nixPkgs = ["nodejs", "ffmpeg"]
+aptPkgs = ["python3", "python3-pip"]
