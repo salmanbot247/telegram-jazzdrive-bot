@@ -10,13 +10,17 @@ const userStates = new Map();
 
 console.log('🤖 Direct Link to JazzDrive Bot start ho gaya!');
 
-// URL check
 function extractURL(text) {
   const m = text.match(/(https?:\/\/[^\s]+)/);
   return m ? m[0] : null;
 }
 
-// ── /start command ────────────────────────
+// 🛡️ Naya Function: Telegram ko crash hone se bachaane ke liye
+function safeErrorMsg(errText) {
+  if (!errText) return "Unknown Error";
+  return errText.length > 500 ? errText.substring(0, 500) + "\n...[Error lamba hone ki wajah se crop kar diya gaya]" : errText;
+}
+
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id,
     `👋 *Salam! Direct JazzDrive Bot mein khush aamdeed!*\n\n` +
@@ -30,7 +34,6 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-// ── Main message handler ──────────────────
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
@@ -38,7 +41,6 @@ bot.on('message', async (msg) => {
 
   const state = userStates.get(chatId) || { step: 'idle' };
 
-  // STEP 1: URL
   if (state.step === 'idle') {
     const url = extractURL(text);
     if (!url) {
@@ -47,23 +49,22 @@ bot.on('message', async (msg) => {
     }
 
     userStates.set(chatId, { step: 'awaiting_jazz_number', url });
-    await bot.sendMessage(chatId,
-      `✅ *Link mil gaya!*\n\n📱 *Apna Jazz Number enter karo (03XXXXXXXXX):*`,
-      { parse_mode: 'Markdown' }
-    );
+    await bot.sendMessage(chatId, `✅ *Link mil gaya!*\n\n📱 *Apna Jazz Number enter karo (03XXXXXXXXX):*`, { parse_mode: 'Markdown' });
     return;
   }
 
-  // STEP 2: Jazz number
   if (state.step === 'awaiting_jazz_number') {
     if (!/^03[0-9]{9}$/.test(text)) {
       await bot.sendMessage(chatId, '❌ Galat format. 03XXXXXXXXX (11 numbers)');
       return;
     }
-    await bot.sendMessage(chatId, '📤 OTP bheja ja raha hai...');
-    const result = await requestOTP(text);
+    await bot.sendMessage(chatId, '📤 OTP bheja ja raha hai... (Abhi screenshots aayenge)');
+    
+    // Yahan humne bot aur chatId pass kar diya hai
+    const result = await requestOTP(text, bot, chatId); 
+    
     if (!result.success) {
-      await bot.sendMessage(chatId, `❌ OTP fail: ${result.error}`);
+      await bot.sendMessage(chatId, `❌ OTP fail:\n${safeErrorMsg(result.error)}`);
       userStates.set(chatId, { step: 'idle' });
       return;
     }
@@ -72,7 +73,6 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  // STEP 3: OTP → Download → Upload
   if (state.step === 'awaiting_otp') {
     if (!/^[0-9]{4,6}$/.test(text)) {
       await bot.sendMessage(chatId, '❌ OTP sirf numbers (4-6 digits)');
@@ -80,9 +80,10 @@ bot.on('message', async (msg) => {
     }
 
     await bot.sendMessage(chatId, '🔐 OTP verify ho raha hai...');
-    const loginResult = await verifyOTP(state.jazzPhone, text);
+    const loginResult = await verifyOTP(state.jazzPhone, text, bot, chatId);
+    
     if (!loginResult.success) {
-      await bot.sendMessage(chatId, `❌ Login fail: ${loginResult.error}`);
+      await bot.sendMessage(chatId, `❌ Login fail:\n${safeErrorMsg(loginResult.error)}`);
       userStates.set(chatId, { step: 'idle' });
       return;
     }
@@ -93,32 +94,26 @@ bot.on('message', async (msg) => {
     try {
       dl = await downloadMedia(state.url);
     } catch (err) {
-      await bot.sendMessage(chatId, `❌ Download fail: ${err.message}`);
+      await bot.sendMessage(chatId, `❌ Download fail:\n${safeErrorMsg(err.message)}`);
       userStates.set(chatId, { step: 'idle' });
       return;
     }
 
-    await bot.sendMessage(chatId,
-      `✅ Download complete!\n📁 ${dl.fileName}\n📦 ${(dl.fileSize/1024/1024).toFixed(2)} MB\n\n☁️ JazzDrive pe upload ho raha hai...`
-    );
+    await bot.sendMessage(chatId, `✅ Download complete!\n📁 ${dl.fileName}\n📦 ${(dl.fileSize/1024/1024).toFixed(2)} MB\n\n☁️ JazzDrive pe upload ho raha hai...`);
 
-    const up = await uploadFile(dl.filePath, dl.fileName);
+    const up = await uploadFile(dl.filePath, dl.fileName, bot, chatId);
     cleanupFile(dl.filePath);
 
     if (!up.success) {
-      await bot.sendMessage(chatId, `❌ Upload fail: ${up.error}`);
+      await bot.sendMessage(chatId, `❌ Upload fail:\n${safeErrorMsg(up.error)}`);
       userStates.set(chatId, { step: 'idle' });
       return;
     }
 
-    await bot.sendMessage(chatId,
-      `🎉 *Upload Complete!*\n\n📂 *${dl.fileName}*\n📦 Size: ${up.fileSize}\n\n_JazzDrive app mein check karo — bilkul free!_ ✅`,
-      { parse_mode: 'Markdown' }
-    );
+    await bot.sendMessage(chatId, `🎉 *Upload Complete!*\n\n📂 *${dl.fileName}*\n📦 Size: ${up.fileSize}\n\n_JazzDrive app mein check karo — bilkul free!_ ✅`, { parse_mode: 'Markdown' });
 
     userStates.set(chatId, { step: 'idle' });
   }
 });
 
-// Keep alive
 process.on('unhandledRejection', (err) => console.error('Unhandled:', err.message));
