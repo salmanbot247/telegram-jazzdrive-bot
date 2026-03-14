@@ -7,15 +7,12 @@ const COOKIES_FILE = './yt_cookies.txt';
 
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
-// Railway variable se cookies file banao
 function setupCookies() {
   const cookies = process.env.YT_COOKIES;
   if (cookies) {
     fs.writeFileSync(COOKIES_FILE, cookies, 'utf8');
-    console.log('✅ YouTube cookies file ready!');
     return true;
   }
-  console.log('⚠️ YT_COOKIES not found');
   return false;
 }
 
@@ -25,13 +22,8 @@ function ensureYtDlp() {
 }
 
 function getBaseOptions() {
-  const opts = {
-    noWarnings: true,
-    noPlaylist: true
-  };
-  if (fs.existsSync(COOKIES_FILE)) {
-    opts.cookies = COOKIES_FILE;
-  }
+  const opts = { noWarnings: true, noPlaylist: true };
+  if (fs.existsSync(COOKIES_FILE)) opts.cookies = COOKIES_FILE;
   return opts;
 }
 
@@ -49,17 +41,26 @@ async function downloadMedia(url, quality) {
   const ts = Date.now();
   const outputPath = path.join(DOWNLOAD_DIR, `${ts}.%(ext)s`);
 
-  let options = {
-    ...getBaseOptions(),
-    output: outputPath
+  // Simple formats - sabse compatible
+  const formats = {
+    '1': 'worstvideo[ext=mp4]+bestaudio[ext=m4a]/worst[ext=mp4]/worst',
+    '2': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]',
+    '3': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]',
+    '4': 'bestaudio/best'
   };
 
-  switch (quality) {
-    case '1': options.format = 'bestvideo[height<=360]+bestaudio/best[height<=360]'; options.mergeOutputFormat = 'mp4'; break;
-    case '2': options.format = 'bestvideo[height<=720]+bestaudio/best[height<=720]'; options.mergeOutputFormat = 'mp4'; break;
-    case '3': options.format = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]'; options.mergeOutputFormat = 'mp4'; break;
-    case '4': options.format = 'bestaudio'; options.extractAudio = true; options.audioFormat = 'mp3'; options.audioQuality = 0; break;
-    default: options.format = 'best[height<=720]'; options.mergeOutputFormat = 'mp4';
+  let options = {
+    ...getBaseOptions(),
+    output: outputPath,
+    format: formats[quality] || 'best'
+  };
+
+  if (quality === '4') {
+    options.extractAudio = true;
+    options.audioFormat = 'mp3';
+    options.audioQuality = 0;
+  } else {
+    options.mergeOutputFormat = 'mp4';
   }
 
   await youtubeDl(url, options);
